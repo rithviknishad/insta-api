@@ -9,35 +9,30 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
-// TODO: check if there's late initialization instead of using function to get collection
-func collection() *mongo.Collection {
-	return DB.Collection("users")
-}
-
-type UserPost struct {
-	Name     string `bson:"name,omitempty"`
-	Email    string `bson:"email,omitempty"`
-	Password string `bson:"passsword,omitempty"`
+type User struct {
+	Id       primitive.ObjectID `json:"_id" bson:"_id"`
+	Name     string             `json:"name" bson:"name"`
+	Email    string             `json:"email" bson:"email"`
+	Password string             `json:"password" bson:"passsword"`
 }
 
 func UsersHandler(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 
 	case "GET":
-		GetUser(w, r)
+		getUser(w, r)
 
 	case "POST":
-		CreateUser(w, r)
+		createUser(w, r)
 
 	default:
 		fmt.Fprintf(w, "Whoops :/ We can do only GET and POST.")
 	}
 }
 
-func CreateUser(w http.ResponseWriter, r *http.Request) {
+func createUser(w http.ResponseWriter, r *http.Request) {
 	body, _ := ioutil.ReadAll(r.Body)
 
 	keyVal := make(map[string]string)
@@ -62,29 +57,36 @@ func CreateUser(w http.ResponseWriter, r *http.Request) {
 
 	// TODO: password = securedPassword
 
-	user := bson.D{
-		{"name", name},
-		{"email", email},
-		{"password", password},
+	doc := bson.M{
+		"name":     name,
+		"email":    email,
+		"password": password,
 	}
 
-	if res, err := collection().InsertOne(MongoContext, user); err != nil {
+	if res, err := DB.Collection("users").InsertOne(MongoContext, doc); err != nil {
 		fmt.Fprintf(w, "Failed to create user.\n%s", err)
 	} else {
 		// Respond w/ created user's id.
 		// TODO: convert to JSON instead of plain
-		fmt.Fprint(w, res.InsertedID.(primitive.ObjectID).Hex())
+
+		id := res.InsertedID.(primitive.ObjectID).Hex()
+
+		fmt.Fprint(w, bson.M{"_id": id})
 	}
 }
 
-func GetUser(w http.ResponseWriter, r *http.Request) {
+func getUser(w http.ResponseWriter, r *http.Request) {
 
 	body, _ := ioutil.ReadAll(r.Body)
 
 	keyVal := make(map[string]string)
 	json.Unmarshal(body, &keyVal)
 
-	name := keyVal["name"]
+	id := keyVal["_id"]
 
-	fmt.Fprintf(w, "%s", name)
+	print(id)
+
+	result := DB.Collection("users").FindOne(MongoContext, bson.M{"_id": id})
+
+	fmt.Fprint(w, result.Decode(&User{}))
 }
